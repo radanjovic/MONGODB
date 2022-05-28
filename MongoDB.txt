@@ -1,0 +1,378 @@
+				MongoDB lookup():
+
+For references: use aggregate method to JOIN together data from 2 collections in one query.
+We use it by calling it on the collection that has reference stored in it (here books), and
+then adding lookup method to it.
+Lookup method takes 4 args: 
+	- from - another collection where referenced data is stored
+	- localField - field name in current collection which stores references (in our case
+	  books collection have authors field with author's ids stored)
+	- foreignField - field in joined (second) collection which correlates to our local
+	  filed (in our case - since we store ids for references, we use _id field as foreign)
+	- as - field to give an alias to what is returned from lookup
+
+db.books.aggregate([{
+    $lookup: {
+	from: "authors",
+	localField: "authors",
+	foreignField: "_id",
+	as: "creators"
+    }
+}]); 
+
+// ---> This will return new obj with creators field in which are all authors from authors field 
+// for books ...
+
+
+
+
+
+		Starting local mongodb with another db path specified :
+in the shell: mongod --dbpath [path] --logpath [path/log.log] - creates db on specified path and
+outputs all the logs to log.log file !!!
+OR - we can create mongo config file with all the configurations (.cfg), and then when starting 
+mongo, just type: mongod -f (or --config) [path-to-cfg-file]
+
+
+
+
+				Operators:
+
+Equality (comparison) operators:
+db.coll.find({field: {$gt: val}}) -- finds all where field's val is greater than specified val...
+Same for : $eq (equal), $ne(not equal), $gt (greater than), $gte (gt or equal), $lt (lower than), 
+$lte (lt or eq)...
+
+db.coll.find({field: {$in : [val1, val2]}}) - finds all where field's val is in range of val1 and 2
+Same for : $nin - not in !
+
+
+
+Logical operators: 
+db.coll.find({$or: [{field: {$lt: val1}}, {field: {$lt: val2}]}) - finds all where field's val is 
+either lover than val1 or greater than val2 - nothing inbetween - always an array like this!
+Same for: $nor (neither - opposite from or - returns all inbetween), $and (and - returns all docs
+where both or more field's values equal to true - same can be achieved with simple FIND with multiple
+filters ... -> it's best to use $and only when we need to filter the same field for multiple values (
+like with some arrays...)).
+db.coll.find({field: {$not: {$eq: val}}}) - finds all where field value is not specified value... (
+better to use $ne
+
+
+
+Element operators:
+db.coll.find({field: {$exists: true/false}}) - finds all where field exist/not exists(without regard 
+for value - it returns even if field is false, null, ...)
+db.coll.find({field: {$type: "number"/"string"/...}) - finds all where field is of specified type
+
+
+
+Evaluation operators:
+$jsonSchema - validate doc agains the given json schema, $mod - modulo operation on the value of field,
+$text - performs text search, $where - DEPRECATED, 
+db.coll.find({field: {$regex: /someText/}}) - finds all where regex is a match - not most efficient one!
+db.coll.find({$expr: {$gt: ["$field1", "$field2"]}}) - expr makes comparison between 2 fields of the same
+doc in collection, and returns only if spec expr is true - in this case: if field1 is greater than 2 !
+
+db.coll.find({$expr: {$gt: [{$cond: {if: {$gte: ["$field1", val1]}, then: {$subtract: ["$field1", val2]},
+else: "$volume"}}, "field2"]}}) - Comparison with if and else ...
+
+
+
+Array operators:
+db.coll.find({arrayField: {$size: 3}}) - finds all the docs where arrayField has length of exactly 3
+db.coll.find({arrayField: {$all: ["val1", "val2"]}}) - finds all the docs where arrayField has val1 and
+val2, but they don't have to be in that order - on positon 0 and 1 - just have to be present!
+db.coll.find({arrayField: {$elemMatch: {field1: "val1", field2: "val2"}}}) - with elemMatch it takes elem
+and searches it with the embedded obj - or instead of field1: "val1" - if it's not embedded doc, we can 
+just run our queries : $gte: 10 ...; {$slice: x} - slice array to get x number of items, {$slice: [1,2]}
+here we slice array at position 1 and get next 2 vals...
+
+
+
+
+				Cursor
+db.coll.find() - is a cursor, it doesn't return all the results, but a cursor, so we can fetch batches..
+It has many methods available: .sort() - for sorting, can have multiple sorting in it, order is import! (
+.sort(field: 1(asc) / -1(desc)); .limit(x) - where x is number, limits number of results it returns; 
+.skip(x) - x is number - skips that number of elements from the next batch..; .next() - gets the next
+batch, ...
+db.coll.find({arrayField: "val1"}, {"arrayField.$":1}) - find all the docs where arrField is the val1, 
+but returns only that one val, even though that doc has more vals in array!
+
+
+
+				Updating fields
+$set - setting the field(s) to desired new values : db.coll.updateOne({_id:"x"}, {$set: {fN:val..}})
+
+db.coll.updateOne({_id:"x"}, {$inc: {fieldName: 1/-1/...}}) - $inc takes field name and increments or
+decrements its value (should be number) by specified count...
+
+db.coll.updateOne({_id:"x"}, {$min: {fieldName: val}}) - only changes fieldName val if existing is 
+lower than specified one
+db.coll.updateOne({_id:"x"}, {$max: {fieldName: val}}) - only changes fieldName val if existing is 
+higher than specified one
+db.coll.updateOne({_id:"x"}, {$mul: {fieldName: val}}) - multiplies old value by the new specified
+value (1.1 -> 10% ...)
+
+db.coll.updateMany({...}, {$unset: {fieldName: ""}}) - deletes (unsets) specified field
+name from the collection (docs that it found) - REMOVING FIELDS
+
+db.coll.updateMany({...}, {$rename: {fieldName: "newFieldName"}) - renames field to be new field name!
+
+db.coll.updateOne({...}, {$set: {fieldName1: val1, fieldName2: val2, ...}, {upsert: true}) - tries to
+find the specified document, but if no document is found, it creates (inserts) one - upsert!
+
+db.coll.updateMany({arrayField: {$elemMatch: {field1: val1, field2: val2}}},{$set: {"arrayField.$": {
+field1:va1, field2: val2}}) - update only matched field in array - we can also add new field to this 
+array by : "arrayField.$.newField" !
+
+db.coll.updateMany({...}, {$inc: {"arrayField.$[]": 1/-1}}) updates (not replaces) the array element.
+If we had nested doc in array, we could acces that too: "arrayField.$[].fieldName": xxx ... !!!
+
+db.coll.updateMany({...}, {$set : {"arrayField.$[el].fieldName": val1}}, {arrayFilters: [{el.fieldName
+: val2}]}) - first {} finds the docs we want to update, second sets fieldName for all elements in array
+to a val1, but only if the conditions from third {} are true - el is the name we gave (can be anything)
+and then we repeat it in third {} to get a hold of that el and set some other filters to it, which don't
+have to be the same as filters  from the first {} which just finds the documents that we want to upd...
+
+db.coll.updateOne({..}, {$push: {arrayField: {fieldName: val1, ...}}}) - this pushes one more field to 
+array without deleting/updating the other fields in that array. Also can be: {$push: {arr: {$each: [{fld1:
+val1}, {fld2: val2}], $sort: {...}}}} - each adds new embedded array for each, and sort sorts it
+
+db.coll.updateOne({..}, {$pull: {arrayField: {fieldName: val}}}) - removes just specified field name from
+array.
+
+db.coll.updateOne({..}, {$pop: {arrayField: 1/-1}}) - 1 removes last element in array, -1 first !
+
+
+
+					Delete
+db.coll.deleteOne({...}) - deletes first one it found with filter in {}
+db.coll.deleteMany({...}) - deletes all that meat filter
+
+db.coll.drop() - deletes entire collection
+db.dropDatabase() - deletes entire db
+
+
+
+					INDEX
+db.coll.explain().find(...) - explains you the process of finding the query
+db.coll.explain("executionStats").find(...) - explains and gives you execution stats, incl. time it took
+to run query ...
+
+db.coll.createIndex({fieldName: 1/-1}) - 1 in asc -1 in desc order. We can add options. One of the options
+is to add the index in the background. Default is false, so if our db is running and someone tries to insert
+or find or update, their process will be in the background while creation of index is in the foregroud -
+being executed first. To change this and run creation of index in bcgr, we can use: {background: true} 
+option, right after our first {} with field for index !
+
+db.coll.dropIndex({fieldName: 1/-1}) - deletes/drops the selected index. For some indexes (text) this will
+not work, and we have to drop index by its name - we find its name with getIndexes !
+
+db.coll.createIndex({fieldName1: 1/-1, fieldName2: 1/-1}) - creates 1 index with 2 values, that are 
+connected, and order does matter - which is why it's better to put as first field the field with more
+different values - first field can also be used standalone for query - find({field1:val1}) - will return
+results from this index because the field specified is first field in index ! But not the second !
+
+db.coll.find(...).sort(...) - if index is in sort -> faster sort since list is already sorted !
+
+db.coll.getIndexes() - returns all indexes that exist for a collection.
+
+db.coll.createIndex({fieldName: 1}, {unique: true}) - creates index on field, which must be unique - 
+good for usernames, email addresses and so on ...
+
+db.coll.createIndex({fieldName1: 1}, {partialFilterExpression: {fieldName2(1): val}}) - creates partial 
+expression for part of data that is often queried for! - IMPORTANT - in find we must specify both the
+fields - if they are different !
+
+db.coll.createIndex({timeFieldName: 1}, {expireAfterSeconds: 10}) - collection destroys itself after 
+x seconds, timeFieldName must be of Date type ! and only 1 field can be specified !
+
+db.coll.expain("allIndexPlans").find(...) - detailed comparison of all exectuinon plans that our query
+can make !
+
+db.coll.createIndex({fieldName: "text"}) - creates special text index for the field name (which can be
+title/description or any other field with multiple words) - and does it by creating an array of all the
+words in that field as lower case!, so that query can match up with any of them ! - good for SEARCH. 
+In this case, find looks like this: db.coll.find({$text: {$search: "someTextToSearchFor"}}) - this text
+can be a series of words and it will match against any of the words from it. But if we want to search 
+for a particular phrase - we can enclose it in "" and search just for it - in mongoDB this "" must be
+escaped since it's already in a field with "" -> $search: "\"some phrase\"". To exclude some words from
+our query, we can add - in from of it ! So if we search for "awesome -car" - it will find all matches
+that have word awesome in it, but not car ! Also, if we want to search case sensitive, we add: {$search:
+"...", caseSensitive: true} !
+
+db.coll.find({$text: {$search: "someText"}}, {score: {$meta: "textScore"}}) - show us the score mongo
+gave to each of the results in our query - so we can sort our results according to this score, and we
+can do it by adding .sort({score: {$meta: "textScore"}}) to our query up !
+
+db.coll.createIndex({title: "text", summary: "text"}) - creates 1 index (THERE CAN ONLY BE 1 TEXT INDEX
+IN COLLECTION AT ALL TIMES !), but it combines title and summary text ! We can also asign weights to it
+to change how mongoDB assignes score to them. In this case, we would want title to have more weight than
+summary and to match easily! We do it by adding another {} after first {} where our index is, and in this
+second {} we add: {weights: {title: 3, description: 1}} - or any other numbers (they correlate one to
+each other, not to some outside measure !!!)
+
+db.coll.createIndex({fieldName: 1/-1}, {default_language: "german/..."}) - changes def. lang (def is eng)
+
+
+
+				Geo-spatial Data
+db.coll.insertOne({name: "xxx", location: {type: "Point", coordinates: [longitudeVal, latitudeVal]}}) - 
+adds geoJSON to mongodb - must have type with val (Point is one of the options), and coordinates, which
+must be array in which first param is longitude (NUMBER) and the second is latitude (also NUMBER)...
+
+To successfully query geospatial data, we must add geospatial index: db.coll.createIndex({fieldName(
+location) : "2dsphere"}) - creates geospatial index on specified field name - in our case location.
+
+db.coll.find({fieldName(location): {$near : {$geometry : {type: 'Point', coordinates: [x,y]}}}}) - for
+type and coords the same rules ! - this would (if there is geospatial index) find the close location, but
+for better queries we should add: -||- {$geometry: ...}, {$maxDistance: x}.. - where x is just a number
+calculated behind the scenes in meters ! It can also have $minDistance...
+
+db.coll.find({location: {$geoWithin: {$geometry: {type: "Polygon", coordinates: [[x1,y1], [x2,y2], [x3,y3],
+[x4,y4], [x1,y1]]}}}}) - gets all data inside the polygon (square) - polygon has to get nested arrays of
+long and lat, which begin and end with the same point (x1,y1) - and then it returns all the points inside
+that polygon...
+
+db.coll.find({area: {$geoIntersects: {$geometry: {type: "Point", coordinates: [x,y]}}}}) - this returns
+obj if there is a point with coords in geometry in area - and area itself is polygon !!!
+
+db.coll.find({location: {$geoWithing: {$centerSphere: [[x,y], RADIANT]}}}) - centerSphere creates a sphere
+around the point in the center (which is x,y), and finds all objects with location inside the sphere. To
+calculate the sphere we must use RADIANT which we create on our own (for kilometers its x / 6378.1) !
+
+
+
+
+					AGGREGATION
+db.coll.aggregate([{$match: {fieldName: val}}, {$group: {_id: {someKey: "$fieldName", anotherKey: {$sum: 1},
+anotherKey2: {$avg: ...}}, {$sort: {ahotherKey: 1/-1}}, {$limit: x}}}}])
+Aggregation always takes [] array as input, and that array is just a series of steps! Each step is {} obj!
+Aggregation is a replacement for find, and allows us to run more developed queries in mongoDB. $match is
+somewhat similar to find, and accepts object with which it finds data. In {} can go any query that normaly
+would go to find! This can also be our only params inside [] - and it will return cursor with some of the
+data it found ! So match === filter (for find)!
+$group is for grouping the matched results. It always takes {} as arg, which takes _id as key and another
+{} as input !!! THen this {} has some key of our own choosing (name) and value of "$fieldName" - and field
+name is just a field by which we want to group! Second param also has key of our chosing (name), and then
+we can use some of the methods by mongodb - in our case - $sum - which sums all the results that can be
+grouped by our criteria and gives us back that number (1 is starting) !!!! - This does not return any data
+but just the group name (field name by which it is grouped) and number of sum (length) for that group!
+$sort - sorts the results got back from match and group - but just by the fields we have access to from the
+match and group (not the original data)!
+$limit - limits the number of results we get back...
+$skip: x - skips some number of data - order does matter - skip must be before limit to not skip the data
+we got back from limit!
+
+db.coll.aggregate([{$project: {_id: 0, fieldName1: 1, NEWFIELD: {$concat: ["$fieldName2"," ", "$fN3"]}}}])
+$project - creates a projection of our data, much like second {} in find does. We can include some fields
+with 1, exclude others with 0, and create new fields, where we give them a name (NEWFIELD) as key, and as
+value we pass another {}. This {} has $concat method to concatonate some fields, and it takes [] of those
+fields as value, which it the concatonates. This can be good for names: name: {$concat: ["$name.firstName",
+" ", "$name.lastName"]}... We can also pass {} as inputs to concat[]: {$concat: [{$toUpper: "$fieldName"},
+ " ", {$toLower: "$fieldName"}]} .. or : {$toUpper: {$substrCP: ["$fieldName", 0, 1]}}, {$substrCP: ["$fN", 
+1, {$subtract: [{$strLenCP: "$fN"}, 1]}]} - First example is going to create new fields with all the upper
+case letters, while second one only changes first letter to upper, while returns the other letters as lower!
+We can also have multiple project method chained !!! Project is mainly for projecting - transforming data..!
+
+db.coll.aggregate([..., fieldName: {$convert: {input: "$origFieldName", to: "double/string/...", onError: some
+DefaulValueOnError(for number: 0.00 or such...), onNull: someDefaultValueOnNull...}}]) - with $convert we can
+convert the data from one type to another that we need or want to use. $convert takes object as value, and it
+has 4 fields: input - original input, to - to what to convert it, and onError and onNull- with def val for err
+and null... For simple transformations - where we don't need onError and onNull, we can use default mongoDB
+methods, like : {$toDate : "$origField"} and other (toString, toInt, .... list on mongodb site...)!
+
+db.coll.aggregate([{$group: {_id: {fN: "$fN"}, newArr: {$push: "$fN"}}}]) - $push can create new array and
+push to it the values of the specified field, and then groupt it together. The values that are pushed are added
+to the new arr, and values can be anything (object, arrays, strings, ...). But if the value is array, maybe
+we want to pull values from it and not push the arrays to newArr but its values. For that, we can use unwind:
+db.coll.aggregate([{$unwind: "$arrName"}, {$group ..., newArr: {$addToSet: "$fN"}}]) - in this example, unwind
+first takes our doc and splits it in multiple docs, where arrName is reconstructed and multiple docs from it
+are created (if arr had 3 elements, the new collection will now have 3 new docs with all the same information,
+but the difference is that arrName field will now be simple field holding just 1 value (in our case 3 different
+docs will hold 3 different values from that array, but all the other data will be duplicated!)), then group will
+group it all together again, and create newArr in which all the values will be simple values, not arrays as bef.
+What addToSet does (instead of push) it adds value only if another same value is not in the array already !
+This, unlike push, removes the duplicates!
+
+Projection with arrays: db.coll.aggregate([{$project: {..}, someName: {$slice: ["$arrName", 1]}}]) -$slice is
+for slicing arrays... 
+db.coll.aggregate([{$project: {..}, someName: {$size: "$arrName"}}]) - $size will give our length of an array 
+which we can store in someName... 
+db.coll.aggregate([{$project: {..}, someName: {$filter: {input: "$arrayName", as: "someName", cond: {$gt : 
+["$$sc", x]}}}}]) - $filter filters out array and returns only matches: input is the array on which we filter,
+as is the name we give for each element of array (filter basically iterates over arr -> for i in arr...), cond
+is the last needed field and it takes object (cond -condition) - this is where filtering is done. Here we can
+do comparison. In our case $gt (and most other comparison operators) need array in which first field is the val
+for el of arr, while second is to what we compare it (x). To point to the element we gave name at as, we use
+$$ - to tell mongo that it's not a field in db, but element we just created in filter ...
+
+db.coll.aggregate([{$bucket: {groupBy: "$fieldName", boundaries: [a, b, c, x, y, z,...]}, output: {fieldName: 
+{$push: "$fN.."}}}]) - bucket creates buckets of data where fieldName in group by is sliced by boundaries, and
+groups of data is returned: good example is age: {groupBy: "$age", boundaries: [0,18,30,50,80,120].. - it will
+create a bucket for each of the age spans (0-17, 18-29, 30-50...) and do its thing to it what we spec. after..
+db.coll.aggregate([{$bucketAuto: {groupBy: "$xx", buckets: x, output:{..}}}]) - $bucketAuto creates automatic
+buckets for us, where x is the number of bucket we want !
+
+... {$out: "someCollectionName"} - if we add this to the end of our query, we will create a new collection with
+only the data from our prev pipeline !
+
+
+
+					Security:
+Mongo Auth: sudo mongod --auth -> Connects to server, but now requiring users to be authenticated to work
+with data! After starting our server like this, we need to authenticate ourselves: 1) mongo -u username -p pw
+--authenticationDatabase nameOfDb or 2) after connecting with mongo, we add: db.auth('username, 'pw').
+This creates a problem - we have db without any users (if we didn't create user before). So now, we have to use
+mongoDB's solution for this:
+use admin (switches to admin db), and then: db.createUser({user: "username", pwd: "password", roles: ["
+userAdminAnyDatabase"]}), and then db.auth() with created username and pw! We log out with: db.logout(), after
+which we can log in with other usernames and pws
+
+Built-In Roles: 1)for database user: read, readWrite, 2) for admins: dbAdmin, userAdmin, dbOwner, or 3)all db
+roles: readAnyDatabase, readWriteAnyDatabase, userAdminAnyDatabase, dbAdminAnyDatabase, 4)cluster admins: 
+clusterManager, clusterMonitor, hostManager, clusterAdmin, 5)Backup/Restore: backup, restore, and 6)superuser:
+dbOwner (admin), userAdmin (admin), userAdminAnyDatabase root
+
+Assigning Roles to users: use dbName, then db.createUser({user: 'dev', pwd: 'dev', roles: ['readWrite]})
+Updating Roles: db.updateUser("username", {roles: ['readWrite', {role: 'readWrite', db: 'dbName'}]}) - here
+roles overwrites last roles, so if we want to keep them, we need to type them in again, and then we add new
+ones with new obj in which we add role and db explicitely.
+db.getUser("username") - gets us that user and all its roles
+
+
+
+
+					Performance:
+Capped Collection - collection that is capped in size (overall size or number of documents) and in which, if
+new docs come over the specified size, oldest ones are deleted to make room for newer ones!
+db.createCollection("someName", {capped: true, size: x, max: y}) - with capped: true and size in bytes being
+must have, and max is optional - where y is total number of documents that it will store...
+
+Replica Set - replica of the mongodb server. When writing, the same data is (asyncly!) written in both primary
+node and in replica nodes. Replica nodes than can be used for getting data, but also just as a backup.
+
+Sharding - horizontal scaling - each Shard is sepparate mongodb server storing some data. Each shard is also a
+replica, but they don't store the same data - data is distributed across shards: if we have let's say 5 shards,
+first stores data A-F, and so on... Trick is to know where each data is stored - for this we use mongos (mongo
+router) ! and it does with the help of shard keys - special field in docs which tell it on which server data is
+stored!
+
+
+
+
+					
+
+
+
+
+
+
+
+
+
+
+
+
